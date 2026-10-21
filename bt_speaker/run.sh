@@ -34,14 +34,25 @@ if [ -z "${MAC}" ]; then
   exit 0
 fi
 bashio::log.info "Target speaker: ${MAC}"
+was_connected=""
 while true; do
-  if bt info "${MAC}" | grep -q "Connected: yes"; then sleep 20; continue; fi
-  if ! bt info "${MAC}" | grep -q "Paired: yes"; then
-    bashio::log.info "Not paired yet: scanning ${SCAN} s, then pairing (speaker must be in pairing mode)"
+  info=$(bt info "${MAC}")
+  if echo "${info}" | grep -q "Connected: yes"; then
+    [ "${was_connected}" != "yes" ] && bashio::log.info "Speaker connected"
+    was_connected=yes; sleep 20; continue
+  fi
+  [ "${was_connected}" = "yes" ] && bashio::log.warning "Speaker disconnected (switched off, out of range or auto-off); will keep trying to reconnect every 30 s"
+  was_connected=no
+  if echo "${info}" | grep -q "Paired: no"; then
+    # bond lost on our side: only then pair again (needs the speaker in pairing mode)
+    bashio::log.info "Bond missing: scanning ${SCAN} s, then pairing (speaker must be in pairing mode)"
     bluetoothctl --timeout "${SCAN}" -- scan bredr >/dev/null 2>&1
     bashio::log.info "pair: $(bt pair "${MAC}" | tail -1)"
+    bt trust "${MAC}" >/dev/null
   fi
-  bt trust "${MAC}" >/dev/null
-  bashio::log.info "connect: $(bt connect "${MAC}" | tail -1)"
-  sleep 15
+  result=$(bt connect "${MAC}" | tail -1)
+  case "${result}" in
+    *successful*) bashio::log.info "connect: ${result}" ;;
+    *) sleep 30 ;;   # unreachable: quiet retry
+  esac
 done
