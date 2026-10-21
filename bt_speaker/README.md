@@ -18,3 +18,7 @@ Two extra stdin commands drive the speaker's hardware (AVRCP) volume, which is t
 - `restore` puts the remembered volume back (no-op if nothing was saved).
 
 Used by the office alarm: the entry track swells the alarm in over 5 s while the speaker is ramped to maximum, and the volume is restored on disarm.
+
+## Baseline volume
+
+`volume_percent` (default 50) is the speaker hardware volume the add-on applies every time the speaker connects, because the speaker reports its own level on reconnect and would otherwise silently change how loud Home Assistant sounds. `baseline` on stdin re-applies it on demand.

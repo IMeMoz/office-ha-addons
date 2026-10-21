@@ -4,11 +4,26 @@
 set +e
 MAC=$(bashio::config 'mac')
 SCAN=$(bashio::config 'scan_seconds')
+VOL=$(bashio::config 'volume_percent')
 SINK="bluez_sink.$(echo "${MAC}" | tr ':' '_').a2dp_sink"
 SAVED=/tmp/volume_before_ramp
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
 bt() { timeout 25 bluetoothctl -- "$@" 2>&1; }
 current_volume() { pactl get-sink-volume "${SINK}" 2>/dev/null | grep -o '[0-9]*%' | head -1 | tr -d '%'; }
+# The speaker's hardware (AVRCP) volume is the real loudness ceiling and the speaker reports its
+# own level on every (re)connect, so the configured baseline is re-applied each time it connects.
+apply_baseline() {
+  i=1
+  while [ "${i}" -le 8 ]; do
+    if pactl get-sink-volume "${SINK}" >/dev/null 2>&1; then
+      pactl set-sink-volume "${SINK}" "${VOL}%" 2>&1 | sed 's/^/   /'
+      bashio::log.info "speaker volume set to ${VOL}% (was $(current_volume)%)"
+      return
+    fi
+    sleep 2; i=$((i+1))
+  done
+  bashio::log.warning "sink ${SINK} not found after connect; volume not set"
+}
 # ramp <seconds> <steps>: remember the speaker's hardware volume, then raise it to 100% in equal
 # dB steps (the sink's percent scale is cubic, so the targets are interpolated geometrically).
 ramp() {
@@ -31,11 +46,12 @@ restore() {
     pactl set-sink-volume "${SINK}" "$(cat "${SAVED}")%" 2>&1 | sed 's/^/   /'
     bashio::log.info "restore: speaker volume back to $(cat "${SAVED}")%"; rm -f "${SAVED}"
   else
-    bashio::log.info "restore: nothing saved, volume left at $(current_volume)%"
+    pactl set-sink-volume "${SINK}" "${VOL}%" 2>&1 | sed 's/^/   /'
+    bashio::log.info "restore: nothing saved, speaker volume set to the ${VOL}% baseline"
   fi
 }
 command_loop() {
-  bashio::log.notice "Command channel: send bluetoothctl/pactl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'info XX:..', 'connect XX:..', 'pactl list short sinks', 'ramp 5 10', 'restore')."
+  bashio::log.notice "Command channel: send bluetoothctl/pactl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'info XX:..', 'connect XX:..', 'pactl list short sinks', 'ramp 5 10', 'restore', 'baseline')."
   while IFS= read -r line; do
     line="${line#\"}"; line="${line%\"}"   # the Supervisor passes stdin JSON-quoted
     [ -z "${line}" ] && continue
@@ -43,6 +59,7 @@ command_loop() {
     case "${line}" in
       ramp*) set -- ${line}; ramp "$2" "$3" ;;
       restore*) restore ;;
+      baseline*) apply_baseline ;;
       pactl*) timeout 30 ${line} 2>&1 | sed 's/^/   /' ;;
       scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
       *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
@@ -66,13 +83,16 @@ if [ -z "${MAC}" ]; then
   command_loop
   exit 0
 fi
-bashio::log.info "Target speaker: ${MAC}"
+bashio::log.info "Target speaker: ${MAC} (baseline volume ${VOL}%)"
 (
 was_connected=""
 while true; do
   info=$(bt info "${MAC}")
   if echo "${info}" | grep -q "Connected: yes"; then
-    [ "${was_connected}" != "yes" ] && bashio::log.info "Speaker connected"
+    if [ "${was_connected}" != "yes" ]; then
+      bashio::log.info "Speaker connected"
+      apply_baseline
+    fi
     was_connected=yes; sleep 20; continue
   fi
   [ "${was_connected}" = "yes" ] && bashio::log.warning "Speaker disconnected (switched off, out of range or auto-off); will keep trying to reconnect every 30 s"
