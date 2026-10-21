@@ -19,8 +19,17 @@ if [ -z "${MAC}" ]; then
   timeout "${SCAN}" bluetoothctl -- scan bredr 2>&1 | grep -E "NEW|Failed|not" | sed 's/^/   classic: /'
   bashio::log.notice "Known/seen devices (copy the speaker's MAC into the add-on options, then restart):"
   bt devices | sed 's/^/   /'
-  bashio::log.notice "Sleeping 10 minutes so you can read this log, then exiting."
-  sleep 600; exit 0
+  bashio::log.notice "Command mode: send bluetoothctl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'pair XX:..', 'connect XX:..')."
+  while IFS= read -r line; do
+    [ -z "${line}" ] && continue
+    bashio::log.info "> ${line}"
+    case "${line}" in
+      scan*) timeout 35 bluetoothctl -- ${line} 2>&1 | grep -vE "^\[|Discovery" | sed 's/^/   /' ;;
+      *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
+    esac
+    bashio::log.info "< done: ${line}"
+  done
+  exit 0
 fi
 bashio::log.info "Target speaker: ${MAC}"
 while true; do
