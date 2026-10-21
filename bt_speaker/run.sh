@@ -6,6 +6,20 @@ MAC=$(bashio::config 'mac')
 SCAN=$(bashio::config 'scan_seconds')
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
 bt() { timeout 25 bluetoothctl -- "$@" 2>&1; }
+command_loop() {
+  bashio::log.notice "Command channel: send bluetoothctl/pactl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'info XX:..', 'connect XX:..', 'pactl list short sinks')."
+  while IFS= read -r line; do
+    line="${line#\"}"; line="${line%\"}"   # the Supervisor passes stdin JSON-quoted
+    [ -z "${line}" ] && continue
+    bashio::log.info "> ${line}"
+    case "${line}" in
+      pactl*) timeout 30 ${line} 2>&1 | sed 's/^/   /' ;;
+      scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
+      *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
+    esac
+    bashio::log.info "< done: ${line}"
+  done
+}
 bashio::log.info "D-Bus socket present: $([ -S /run/dbus/system_bus_socket ] && echo yes || echo NO)"
 bashio::log.info "Adapters: $(bt list | tr '\n' ' ')"
 bashio::log.info "power on: $(bt power on | tail -1)"
@@ -19,21 +33,11 @@ if [ -z "${MAC}" ]; then
   bluetoothctl --timeout "${SCAN}" -- scan bredr 2>&1 | grep -E "NEW|Failed|not" | sed 's/^/   classic: /'
   bashio::log.notice "Known/seen devices (copy the speaker's MAC into the add-on options, then restart):"
   bt devices | sed 's/^/   /'
-  bashio::log.notice "Command mode: send bluetoothctl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'pair XX:..', 'connect XX:..')."
-  while IFS= read -r line; do
-    line="${line#\"}"; line="${line%\"}"   # the Supervisor passes stdin JSON-quoted
-    [ -z "${line}" ] && continue
-    bashio::log.info "> ${line}"
-    case "${line}" in
-      pactl*) timeout 30 ${line} 2>&1 | sed 's/^/   /' ;;
-      scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
-      *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
-    esac
-    bashio::log.info "< done: ${line}"
-  done
+  command_loop
   exit 0
 fi
 bashio::log.info "Target speaker: ${MAC}"
+(
 was_connected=""
 while true; do
   info=$(bt info "${MAC}")
@@ -56,3 +60,6 @@ while true; do
     *) sleep 30 ;;   # unreachable: quiet retry
   esac
 done
+) &
+command_loop
+wait
