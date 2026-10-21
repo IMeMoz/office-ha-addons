@@ -21,6 +21,7 @@ if [ -z "${MAC}" ]; then
   bt devices | sed 's/^/   /'
   bashio::log.notice "Command mode: send bluetoothctl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'pair XX:..', 'connect XX:..')."
   while IFS= read -r line; do
+    line="${line#\"}"; line="${line%\"}"   # the Supervisor passes stdin JSON-quoted
     [ -z "${line}" ] && continue
     bashio::log.info "> ${line}"
     case "${line}" in
