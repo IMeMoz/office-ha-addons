@@ -25,6 +25,7 @@ if [ -z "${MAC}" ]; then
     [ -z "${line}" ] && continue
     bashio::log.info "> ${line}"
     case "${line}" in
+      pactl*) timeout 30 ${line} 2>&1 | sed 's/^/   /' ;;
       scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
       *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
     esac
