@@ -9,3 +9,12 @@ output that add-ons such as VLC Telnet can be pointed at (add-on page > Audio).
    the log lists the devices found.
 2. Put the speaker's MAC into the options, restart the add-on. It pairs, trusts and connects.
 3. Check Settings > System > Audio (or the Audio tab of the VLC Telnet add-on) for the new output.
+
+## Volume ramp for the alarm
+
+Two extra stdin commands drive the speaker's hardware (AVRCP) volume, which is the real loudness ceiling:
+
+- `ramp 5 10` remembers the current sink volume, then raises it to 100% in 10 equal-dB steps over 5 s.
+- `restore` puts the remembered volume back (no-op if nothing was saved).
+
+Used by the office alarm: the entry track swells the alarm in over 5 s while the speaker is ramped to maximum, and the volume is restored on disarm.

@@ -4,15 +4,45 @@
 set +e
 MAC=$(bashio::config 'mac')
 SCAN=$(bashio::config 'scan_seconds')
+SINK="bluez_sink.$(echo "${MAC}" | tr ':' '_').a2dp_sink"
+SAVED=/tmp/volume_before_ramp
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
 bt() { timeout 25 bluetoothctl -- "$@" 2>&1; }
+current_volume() { pactl get-sink-volume "${SINK}" 2>/dev/null | grep -o '[0-9]*%' | head -1 | tr -d '%'; }
+# ramp <seconds> <steps>: remember the speaker's hardware volume, then raise it to 100% in equal
+# dB steps (the sink's percent scale is cubic, so the targets are interpolated geometrically).
+ramp() {
+  secs=${1:-5}; steps=${2:-10}
+  cur=$(current_volume); [ -z "${cur}" ] && { bashio::log.warning "ramp: sink ${SINK} not found"; return; }
+  [ -f "${SAVED}" ] || echo "${cur}" > "${SAVED}"
+  [ "${cur}" -lt 1 ] && cur=1
+  pause=$(awk -v s="${secs}" -v n="${steps}" 'BEGIN{printf "%.3f", s/n}')
+  i=1
+  while [ "${i}" -le "${steps}" ]; do
+    target=$(awk -v c="${cur}" -v i="${i}" -v n="${steps}" 'BEGIN{printf "%d", 100*(c/100)^((n-i)/n)+0.5}')
+    pactl set-sink-volume "${SINK}" "${target}%" 2>&1 | sed 's/^/   /'
+    [ "${i}" -lt "${steps}" ] && sleep "${pause}"
+    i=$((i+1))
+  done
+  bashio::log.info "ramp: ${cur}% -> 100% over ${secs} s (saved ${cur}% for restore)"
+}
+restore() {
+  if [ -f "${SAVED}" ]; then
+    pactl set-sink-volume "${SINK}" "$(cat "${SAVED}")%" 2>&1 | sed 's/^/   /'
+    bashio::log.info "restore: speaker volume back to $(cat "${SAVED}")%"; rm -f "${SAVED}"
+  else
+    bashio::log.info "restore: nothing saved, volume left at $(current_volume)%"
+  fi
+}
 command_loop() {
-  bashio::log.notice "Command channel: send bluetoothctl/pactl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'info XX:..', 'connect XX:..', 'pactl list short sinks')."
+  bashio::log.notice "Command channel: send bluetoothctl/pactl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'info XX:..', 'connect XX:..', 'pactl list short sinks', 'ramp 5 10', 'restore')."
   while IFS= read -r line; do
     line="${line#\"}"; line="${line%\"}"   # the Supervisor passes stdin JSON-quoted
     [ -z "${line}" ] && continue
     bashio::log.info "> ${line}"
     case "${line}" in
+      ramp*) set -- ${line}; ramp "$2" "$3" ;;
+      restore*) restore ;;
       pactl*) timeout 30 ${line} 2>&1 | sed 's/^/   /' ;;
       scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
       *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
