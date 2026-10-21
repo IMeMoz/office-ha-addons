@@ -1,16 +1,17 @@
 name: Label printer (raw network port)
-version: "1.0.2"
+version: "1.0.3"
 slug: label_printer
 description: Shares the USB label printer on TCP port 9100 (raw/JetDirect) so PCs on the LAN print to it with the vendor driver.
 arch: [aarch64, amd64, armv7]
 startup: services
 boot: auto
 init: false
+watchdog: "tcp://[HOST]:[PORT:9100]"
 ports:
   9100/tcp: 9100
 ports_description:
   9100/tcp: Raw printing port (JetDirect)
-# full_access so a printer that is unplugged/power-cycled reappears without restarting the add-on
-full_access: true
+devices:
+  - /dev/usb/lp0
 options: {}
 schema: {}
