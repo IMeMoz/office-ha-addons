@@ -21,4 +21,4 @@ Used by the office alarm: the entry track swells the alarm in over 5 s while the
 
 ## Baseline volume
 
-`volume_percent` (default 50) is the speaker hardware volume the add-on applies every time the speaker connects, because the speaker reports its own level on reconnect and would otherwise silently change how loud Home Assistant sounds. `baseline` on stdin re-applies it on demand.
+`volume_percent` (default 80) is the speaker hardware volume the add-on applies every time the speaker connects, because the speaker reports its own level on reconnect and would otherwise silently change how loud Home Assistant sounds. `baseline` on stdin re-applies it on demand.
