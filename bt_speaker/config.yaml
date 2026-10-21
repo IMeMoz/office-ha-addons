@@ -1,5 +1,5 @@
 name: Bluetooth speaker keeper
-version: "1.0.2"
+version: "1.0.3"
 slug: bt_speaker
 description: Pairs a Bluetooth speaker with the Pi's Bluetooth and keeps it connected so Home Assistant OS's audio service can use it as an output.
 arch: [aarch64, amd64, armv7]

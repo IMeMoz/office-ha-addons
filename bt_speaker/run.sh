@@ -11,8 +11,12 @@ bashio::log.info "Adapters: $(bt list | tr '\n' ' ')"
 bashio::log.info "power on: $(bt power on | tail -1)"
 bt agent NoInputNoOutput >/dev/null; bt default-agent >/dev/null
 if [ -z "${MAC}" ]; then
-  bashio::log.notice "No 'mac' configured. Put the speaker in pairing mode; scanning ${SCAN} s..."
-  timeout "${SCAN}" bluetoothctl -- scan on 2>&1 | grep -E "NEW|Device" | sed 's/^/   /'
+  bashio::log.notice "No 'mac' configured. Put the speaker in pairing mode; scanning ${SCAN} s (LE + classic)..."
+  bashio::log.info "adapter: $(bt show | grep -E 'Powered|Discovering|Pairable' | tr '
+' ' ')"
+  timeout "${SCAN}" bluetoothctl -- scan on 2>&1 | grep -E "NEW" | sed 's/^/   LE+classic: /'
+  bashio::log.notice "classic (BR/EDR) inquiry for ${SCAN} s..."
+  timeout "${SCAN}" bluetoothctl -- scan bredr 2>&1 | grep -E "NEW|Failed|not" | sed 's/^/   classic: /'
   bashio::log.notice "Known/seen devices (copy the speaker's MAC into the add-on options, then restart):"
   bt devices | sed 's/^/   /'
   bashio::log.notice "Sleeping 10 minutes so you can read this log, then exiting."
@@ -23,7 +27,7 @@ while true; do
   if bt info "${MAC}" | grep -q "Connected: yes"; then sleep 20; continue; fi
   if ! bt info "${MAC}" | grep -q "Paired: yes"; then
     bashio::log.info "Not paired yet: scanning ${SCAN} s, then pairing (speaker must be in pairing mode)"
-    timeout "${SCAN}" bluetoothctl -- scan on >/dev/null 2>&1
+    timeout "${SCAN}" bluetoothctl -- scan bredr >/dev/null 2>&1
     bashio::log.info "pair: $(bt pair "${MAC}" | tail -1)"
   fi
   bt trust "${MAC}" >/dev/null
