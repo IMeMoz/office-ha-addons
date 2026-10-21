@@ -1,0 +1,15 @@
+name: Label printer (raw network port)
+version: "1.0.0"
+slug: label_printer
+description: Shares the USB label printer on TCP port 9100 (raw/JetDirect) so PCs on the LAN print to it with the vendor driver.
+arch: [aarch64, amd64, armv7]
+startup: services
+boot: auto
+ports:
+  9100/tcp: 9100
+ports_description:
+  9100/tcp: Raw printing port (JetDirect)
+devices:
+  - /dev/usb/lp0
+options: {}
+schema: {}
