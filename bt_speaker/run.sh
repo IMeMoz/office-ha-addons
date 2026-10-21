@@ -14,9 +14,9 @@ if [ -z "${MAC}" ]; then
   bashio::log.notice "No 'mac' configured. Put the speaker in pairing mode; scanning ${SCAN} s (LE + classic)..."
   bashio::log.info "adapter: $(bt show | grep -E 'Powered|Discovering|Pairable' | tr '
 ' ' ')"
-  timeout "${SCAN}" bluetoothctl -- scan on 2>&1 | grep -E "NEW" | sed 's/^/   LE+classic: /'
+  bluetoothctl --timeout "${SCAN}" -- scan on 2>&1 | grep -E "NEW" | sed 's/^/   LE+classic: /'
   bashio::log.notice "classic (BR/EDR) inquiry for ${SCAN} s..."
-  timeout "${SCAN}" bluetoothctl -- scan bredr 2>&1 | grep -E "NEW|Failed|not" | sed 's/^/   classic: /'
+  bluetoothctl --timeout "${SCAN}" -- scan bredr 2>&1 | grep -E "NEW|Failed|not" | sed 's/^/   classic: /'
   bashio::log.notice "Known/seen devices (copy the speaker's MAC into the add-on options, then restart):"
   bt devices | sed 's/^/   /'
   bashio::log.notice "Command mode: send bluetoothctl commands with the HA action hassio.addon_stdin (e.g. 'scan bredr', 'devices', 'pair XX:..', 'connect XX:..')."
@@ -25,7 +25,7 @@ if [ -z "${MAC}" ]; then
     [ -z "${line}" ] && continue
     bashio::log.info "> ${line}"
     case "${line}" in
-      scan*) timeout 35 bluetoothctl -- ${line} 2>&1 | grep -vE "^\[|Discovery" | sed 's/^/   /' ;;
+      scan*) bluetoothctl --timeout 35 -- ${line} 2>&1 | grep -E "NEW|CHG.*Name|Failed" | sed 's/^/   /' ;;
       *)     timeout 40 bluetoothctl -- ${line} 2>&1 | sed 's/^/   /' ;;
     esac
     bashio::log.info "< done: ${line}"
@@ -37,7 +37,7 @@ while true; do
   if bt info "${MAC}" | grep -q "Connected: yes"; then sleep 20; continue; fi
   if ! bt info "${MAC}" | grep -q "Paired: yes"; then
     bashio::log.info "Not paired yet: scanning ${SCAN} s, then pairing (speaker must be in pairing mode)"
-    timeout "${SCAN}" bluetoothctl -- scan bredr >/dev/null 2>&1
+    bluetoothctl --timeout "${SCAN}" -- scan bredr >/dev/null 2>&1
     bashio::log.info "pair: $(bt pair "${MAC}" | tail -1)"
   fi
   bt trust "${MAC}" >/dev/null
